@@ -21,17 +21,12 @@
     <replaceproperty src="bundle.folder" dest="bundle.version" replace="${bundle.name}" with=""/>
     
     <getbundlesrc name="${bundle.name}" version="${bundle.version}" propSrcDest="bundle.srcdest" propSrcFilename="bundle.srcfilename"/>
-    <if>
-      <not><available file="${bundle.srcdest}/pgsql/bin/pg_ctl.exe" type="file"/></not>
-      <then>
-        <fail message="File not found: ${bundle.srcdest}/pgsql/bin/pg_ctl.exe"/>
-      </then>
-    </if>
+    <assertfile file="${bundle.srcdest}/pgsql/bin/pg_ctl.exe"/>
     
     <delete dir="${bundle.tmp.prep.path}/${bundle.folder}"/>
     <mkdir dir="${bundle.tmp.prep.path}/${bundle.folder}"/>
     <copy todir="${bundle.tmp.prep.path}/${bundle.folder}" overwrite="true">
-      <fileset dir="${bundle.srcdest}/pgsql" defaultexcludes="yes" excludes="
+      <fileset dir="${bundle.srcdest}/pgsql" excludes="
         bin/pgAdmin*,
         doc/**,
         include/**,
@@ -41,6 +36,8 @@
         **/*.lib,
         **/*.pdb"
       />
+    </copy>
+    <copy todir="${bundle.tmp.prep.path}/${bundle.folder}" overwrite="true">
       <fileset dir="${bundle.path}" defaultexcludes="yes"/>
     </copy>
   </target>
