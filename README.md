@@ -1,7 +1,7 @@
-[![GitHub release](https://img.shields.io/github/release/crazy-max/neard-bin-postgresql.svg?style=flat-square)](https://github.com/crazy-max/neard-bin-postgresql/releases/latest)
-![Total downloads](https://img.shields.io/github/downloads/crazy-max/neard-bin-postgresql/total.svg?style=flat-square)
+[![GitHub release](https://img.shields.io/github/release/neard/module-postgresql.svg?style=flat-square)](https://github.com/neard/module-postgresql/releases/latest)
+![Total downloads](https://img.shields.io/github/downloads/neard/module-postgresql/total.svg?style=flat-square)
 
-This is a module of [Neard project](https://github.com/crazy-max/neard) involving PostgreSQL.
+This is a module of [Neard project](https://github.com/neard/neard) involving PostgreSQL.
 
 ## Documentation and downloads
 
@@ -9,4 +9,4 @@ http://neard.io/modules/postgresql
 
 ## Issues
 
-Issues must be reported on [Neard repository](https://github.com/crazy-max/neard/issues).
+Issues must be reported on [Neard repository](https://github.com/neard/neard/issues).
