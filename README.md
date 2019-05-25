@@ -5,7 +5,7 @@ This is a module of [Neard project](https://github.com/neard/neard) involving Po
 
 ## Documentation and downloads
 
-http://neard.io/modules/postgresql
+https://neard.io/modules/postgresql
 
 ## Issues
 
