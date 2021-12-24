@@ -1,9 +1,9 @@
 #------------------------------------------------------------------------------
 # FILE LOCATIONS
 #------------------------------------------------------------------------------
-data_directory = '~NEARD_LIN_PATH~/bin/postgresql/postgresql9.6.13/data'
-hba_file = '~NEARD_LIN_PATH~/bin/postgresql/postgresql9.6.13/data/pg_hba.conf'
-ident_file = '~NEARD_LIN_PATH~/bin/postgresql/postgresql9.6.13/data/pg_ident.conf'
+data_directory = '~BEARSAMPP_LIN_PATH~/bin/postgresql/postgresql9.2.17/data'
+hba_file = '~BEARSAMPP_LIN_PATH~/bin/postgresql/postgresql9.2.17/data/pg_hba.conf'
+ident_file = '~BEARSAMPP_LIN_PATH~/bin/postgresql/postgresql9.2.17/data/pg_ident.conf'
 
 #------------------------------------------------------------------------------
 # CONNECTIONS AND AUTHENTICATION
@@ -22,7 +22,7 @@ shared_buffers = 32MB
 #------------------------------------------------------------------------------
 log_destination = 'stderr'
 logging_collector = on
-log_directory = '~NEARD_LIN_PATH~/logs'
+log_directory = '~BEARSAMPP_LIN_PATH~/logs'
 log_filename = 'postgresql.log'
 log_file_mode = 0777
 log_truncate_on_rotation = off
