@@ -90,4 +90,8 @@
   color: "b45f06"
   description: "Won't fix"
   from_name: "wontfix"
-
+- # Hacktoberfest
+  name: "Hacktoberfest-Accepted :mending_heart:"
+  description: "Accepted for Hacktoberfest"
+  from_name: "Hacktoberfest accepted"
+  
