@@ -1,9 +1,9 @@
 #------------------------------------------------------------------------------
 # FILE LOCATIONS
 #------------------------------------------------------------------------------
-data_directory = '~BEARSAMPP_LIN_PATH~/bin/postgresql/postgresql15.6/data'
-hba_file = '~BEARSAMPP_LIN_PATH~/bin/postgresql/postgresql15.6/data/pg_hba.conf'
-ident_file = '~BEARSAMPP_LIN_PATH~/bin/postgresql/postgresql15.6/data/pg_ident.conf'
+data_directory = '~BEARSAMPP_LIN_PATH~/bin/postgresql/postgresql16.4/data'
+hba_file = '~BEARSAMPP_LIN_PATH~/bin/postgresql/postgresql16.4/data/pg_hba.conf'
+ident_file = '~BEARSAMPP_LIN_PATH~/bin/postgresql/postgresql16.4/data/pg_ident.conf'
 
 #------------------------------------------------------------------------------
 # CONNECTIONS AND AUTHENTICATION
