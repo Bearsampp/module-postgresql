@@ -9,6 +9,26 @@
 
 This is a module of [Bearsampp project](https://github.com/bearsampp/bearsampp) involving PostgreSQL.
 
+## Building
+
+This module uses a pure Gradle build system. See [BUILD.md](BUILD.md) for detailed build instructions.
+
+### Quick Start
+
+```bash
+# Verify build environment
+gradle verify
+
+# List available versions
+gradle listVersions
+
+# Build a specific version
+gradle release -PbundleVersion=17.5
+
+# Build all versions
+gradle releaseAll
+```
+
 ## Documentation and downloads
 
 https://bearsampp.com/module/postgresql
