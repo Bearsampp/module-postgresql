@@ -20,9 +20,9 @@ plugins {
     id 'base'
 }
 
-// Load build properties
+// Load build properties from gradle.properties
 def buildProps = new Properties()
-file('build.properties').withInputStream { buildProps.load(it) }
+file('gradle.properties').withInputStream { buildProps.load(it) }
 
 // Project information
 group = 'com.bearsampp.modules'
@@ -34,16 +34,15 @@ ext {
     projectBasedir = projectDir.absolutePath
     rootDir = projectDir.parent
     devPath = file("${rootDir}/dev").absolutePath
-    buildPropertiesFile = file('build.properties').absolutePath
 
-    // Bundle properties from build.properties
+    // Bundle properties from gradle.properties
     bundleName = buildProps.getProperty('bundle.name', 'postgresql')
     bundleRelease = buildProps.getProperty('bundle.release', '1.0.0')
     bundleType = buildProps.getProperty('bundle.type', 'bins')
     bundleFormat = buildProps.getProperty('bundle.format', '7z')
 
     // Build paths - with configurable base path
-    // Priority: 1) build.properties, 2) Environment variable, 3) Default
+    // Priority: 1) gradle.properties, 2) Environment variable, 3) Default
     def buildPathFromProps = buildProps.getProperty('build.path', '').trim()
     def buildPathFromEnv = System.getenv('BEARSAMPP_BUILD_PATH') ?: ''
     def defaultBuildPath = "${rootDir}/bearsampp-build"
@@ -733,7 +732,7 @@ tasks.register('verify') {
         checks['Java 8+'] = javaVersion >= JavaVersion.VERSION_1_8
 
         // Check required files
-        checks['build.properties'] = file('build.properties').exists()
+        checks['gradle.properties'] = file('gradle.properties').exists()
 
         // Check dev directory
         checks['dev directory'] = file(devPath).exists()
@@ -846,13 +845,13 @@ tasks.register('listVersions') {
     }
 }
 
-// Task: Validate build.properties
+// Task: Validate gradle.properties
 tasks.register('validateProperties') {
     group = 'verification'
-    description = 'Validate build.properties configuration'
+    description = 'Validate gradle.properties configuration'
 
     doLast {
-        println "Validating build.properties..."
+        println "Validating gradle.properties..."
 
         def required = ['bundle.name', 'bundle.release', 'bundle.type', 'bundle.format']
         def missing = []
