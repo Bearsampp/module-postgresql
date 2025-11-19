@@ -468,10 +468,10 @@ tasks.register('release') {
 
             throw new GradleException("""
                 Bundle version not found: ${bundleName}${versionToBuild}
-                
+
                 Available versions in bin/:
                 ${versionList}
-                
+
                 To see all available versions from modules-untouched:
                   gradle listReleases
             """.stripIndent())
@@ -562,21 +562,45 @@ tasks.register('release') {
         println "Prepared files in: ${postgresqlPrepPath}"
         println ""
 
-        // Create archive
-        def destFile = "bearsampp-${bundleName}-${bundleVersion}-${bundleRelease}"
-        def archiveFile = file("${postgresqlBuildPath}/${destFile}.${bundleFormat}")
-
-        if (archiveFile.exists()) {
-            delete archiveFile
+        println "Copying to bundles_build directory..."
+        def postgresqlBuildPath = file("${bundleTmpBuildPath}/${bundleName}${bundleVersion}")
+        if (postgresqlBuildPath.exists()) {
+            delete postgresqlBuildPath
         }
+        postgresqlBuildPath.mkdirs()
 
-        println "Creating archive..."
+        copy {
+            from postgresqlPrepPath
+            into postgresqlBuildPath
+        }
+        println "Non-zip version available at: ${postgresqlBuildPath}"
+
+        println ""
+        println "Preparing archive..."
+
+        // Determine build output path following Bruno pattern
+        // bearsampp-build/{bundleType}/{bundleName}
+        def buildPath = file(buildBasePath)
+        def buildBinsPath = file("${buildPath}/${bundleType}/${bundleName}")
+        buildBinsPath.mkdirs()
+
+        // Build archive filename
+        def destFile = file("${buildBinsPath}/bearsampp-${bundleName}-${bundleVersion}-${bundleRelease}")
+
+        // Compress based on format
         if (bundleFormat == '7z') {
+            // 7z format
+            def archiveFile = file("${destFile}.7z")
+            if (archiveFile.exists()) {
+                delete archiveFile
+            }
+
             def sevenZip = find7ZipExecutable()
             if (!sevenZip) {
                 throw new GradleException("7-Zip not found. Please install 7-Zip or set 7Z_HOME environment variable.")
             }
 
+            println "Creating 7z archive..."
             def command = [
                 sevenZip,
                 'a',
@@ -592,29 +616,50 @@ tasks.register('release') {
             if (exitCode != 0) {
                 throw new GradleException("7-Zip compression failed with exit code: ${exitCode}")
             }
+
+            println "Archive created: ${archiveFile}"
+            println ""
+
+            // Generate hash files
+            println "Generating hash files..."
+            generateHashFiles(archiveFile)
+
+            println ""
+            println "=".multiply(70)
+            println "[SUCCESS] Release build completed successfully for version ${versionToBuild}"
+            println "Uncompressed directory: ${postgresqlBuildPath}"
+            println "Archive: ${archiveFile.absolutePath}"
+            println "=".multiply(70)
+
         } else {
-            // Use Gradle's built-in ZIP task
+            // ZIP format
+            def archiveFile = file("${destFile}.zip")
+            if (archiveFile.exists()) {
+                delete archiveFile
+            }
+
+            println "Creating ZIP archive..."
             tasks.create(name: "zipArchive${bundleVersion}", type: Zip) {
                 from postgresqlPrepPath.parentFile
                 include "${postgresqlPrepPath.name}/**"
                 destinationDirectory = archiveFile.parentFile
                 archiveFileName = archiveFile.name
             }.execute()
+
+            println "Archive created: ${archiveFile}"
+            println ""
+
+            // Generate hash files
+            println "Generating hash files..."
+            generateHashFiles(archiveFile)
+
+            println ""
+            println "=".multiply(70)
+            println "[SUCCESS] Release build completed successfully for version ${versionToBuild}"
+            println "Uncompressed directory: ${postgresqlBuildPath}"
+            println "Archive: ${archiveFile.absolutePath}"
+            println "=".multiply(70)
         }
-
-        println "Archive created: ${archiveFile}"
-        println ""
-
-        // Generate hash files
-        println "Generating hash files..."
-        generateHashFiles(archiveFile)
-
-        println ""
-        println "=".multiply(70)
-        println "[SUCCESS] Release build completed successfully for version ${versionToBuild}"
-        println "Output directory: ${postgresqlPrepPath}"
-        println "Archive: ${archiveFile.absolutePath}"
-        println "=".multiply(70)
     }
 }
 
@@ -765,19 +810,19 @@ tasks.register('verify') {
             println "  gradle listVersions                    - List available versions"
         } else {
             println "\n[WARNING] Some checks failed. Please review the requirements."
-            
+
             if (!checks['7-Zip']) {
                 println "\n7-Zip Installation:"
                 println "  Download from: https://www.7-zip.org/"
                 println "  Or set 7Z_HOME environment variable to 7-Zip installation directory"
             }
-            
+
             if (!checks['modules-untouched access']) {
                 println "\nmodules-untouched Access:"
                 println "  Check your internet connection"
                 println "  URL: https://github.com/Bearsampp/modules-untouched"
             }
-            
+
             throw new GradleException("Build environment verification failed")
         }
     }
