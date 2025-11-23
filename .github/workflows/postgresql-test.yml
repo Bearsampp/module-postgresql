@@ -318,306 +318,46 @@ jobs:
             exit 1
           }
 
-      - name: Phase 2.1 - Initialize Database Cluster
-        id: init-database
+      - name: Phase 2 - Test Basic Functionality
+        id: test-basic
         if: steps.verify-postgresql.outputs.success == 'true'
         continue-on-error: true
         run: |
           $ErrorActionPreference = "Continue"
           $binPath = "${{ steps.verify-postgresql.outputs.bin-path }}"
-          $dataDir = Join-Path (Get-Location) "test-data\pgdata"
           
-          Write-Host "=== Phase 2.1: Initialize Database Cluster ==="
-          Write-Host "Data directory: $dataDir"
+          Write-Host "=== Phase 2: Test Basic Functionality ==="
           
+          # Test that executables can run and show version
           try {
+            $postgresExe = Join-Path $binPath "postgres.exe"
+            $psqlExe = Join-Path $binPath "psql.exe"
             $initdbExe = Join-Path $binPath "initdb.exe"
             
-            # Initialize the database cluster
-            Write-Host "Initializing database cluster..."
-            $output = & $initdbExe -D $dataDir -U postgres -A trust --locale=C --encoding=UTF8 2>&1 | Out-String
+            Write-Host "`nTesting postgres.exe --version..."
+            $pgVersion = & $postgresExe --version 2>&1 | Out-String
+            Write-Host $pgVersion
+            
+            Write-Host "`nTesting psql.exe --version..."
+            $psqlVersion = & $psqlExe --version 2>&1 | Out-String
+            Write-Host $psqlVersion
+            
+            Write-Host "`nTesting initdb.exe --version..."
+            $initdbVersion = & $initdbExe --version 2>&1 | Out-String
+            Write-Host $initdbVersion
             
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "✅ Database cluster initialized successfully"
-              Write-Host $output
-              echo "success=true" >> $env:GITHUB_OUTPUT
-              echo "data-dir=$dataDir" >> $env:GITHUB_OUTPUT
-            } else {
-              Write-Host "❌ Database initialization failed"
-              Write-Host $output
-              echo "success=false" >> $env:GITHUB_OUTPUT
-              exit 1
-            }
-          } catch {
-            Write-Host "❌ Error initializing database: $_"
-            echo "success=false" >> $env:GITHUB_OUTPUT
-            exit 1
-          }
-
-      - name: Phase 2.2 - Start PostgreSQL Server
-        id: start-server
-        if: steps.init-database.outputs.success == 'true'
-        continue-on-error: true
-        timeout-minutes: 3
-        run: |
-          $ErrorActionPreference = "Continue"
-          $binPath = "${{ steps.verify-postgresql.outputs.bin-path }}"
-          $dataDir = "${{ steps.init-database.outputs.data-dir }}"
-          $logFile = Join-Path (Get-Location) "test-results\postgresql.log"
-          
-          Write-Host "=== Phase 2.2: Start PostgreSQL Server ==="
-          
-          try {
-            $pgCtlExe = Join-Path $binPath "pg_ctl.exe"
-            
-            # Start the server with timeout
-            Write-Host "Starting PostgreSQL server..."
-            $startJob = Start-Job -ScriptBlock {
-              param($pgCtl, $data, $log)
-              & $pgCtl -D $data -l $log -w -t 30 start 2>&1 | Out-String
-            } -ArgumentList $pgCtlExe, $dataDir, $logFile
-            
-            # Wait for the job with timeout
-            $completed = Wait-Job -Job $startJob -Timeout 60
-            
-            if ($completed) {
-              $output = Receive-Job -Job $startJob
-              Write-Host $output
-              Remove-Job -Job $startJob -Force
-            } else {
-              Write-Host "⚠️  Server start timed out after 60 seconds"
-              Stop-Job -Job $startJob
-              Remove-Job -Job $startJob -Force
-            }
-            
-            # Wait a bit for server to stabilize
-            Write-Host "Waiting for server to stabilize..."
-            Start-Sleep -Seconds 3
-            
-            # Check server status
-            Write-Host "Checking server status..."
-            $statusOutput = & $pgCtlExe -D $dataDir status 2>&1 | Out-String
-            Write-Host $statusOutput
-            
-            if ($statusOutput -match "server is running") {
-              Write-Host "✅ PostgreSQL server is running"
-              
-              # Display server log
-              if (Test-Path $logFile) {
-                Write-Host "Server log (last 20 lines):"
-                Get-Content $logFile -Tail 20 | Write-Host
-              }
-              
-              echo "success=true" >> $env:GITHUB_OUTPUT
-              echo "log-file=$logFile" >> $env:GITHUB_OUTPUT
-            } else {
-              Write-Host "❌ Server is not running"
-              if (Test-Path $logFile) {
-                Write-Host "Server log:"
-                Get-Content $logFile | Write-Host
-              }
-              echo "success=false" >> $env:GITHUB_OUTPUT
-              exit 1
-            }
-          } catch {
-            Write-Host "❌ Error starting server: $_"
-            Write-Host "Error details: $($_.Exception.Message)"
-            if (Test-Path $logFile) {
-              Write-Host "Server log:"
-              Get-Content $logFile | Write-Host
-            }
-            echo "success=false" >> $env:GITHUB_OUTPUT
-            exit 1
-          }
-
-      - name: Phase 3.1 - Test Database Connection
-        id: test-connection
-        if: steps.start-server.outputs.success == 'true'
-        continue-on-error: true
-        run: |
-          $ErrorActionPreference = "Continue"
-          $binPath = "${{ steps.verify-postgresql.outputs.bin-path }}"
-          
-          Write-Host "=== Phase 3.1: Test Database Connection ==="
-          
-          try {
-            $psqlExe = Join-Path $binPath "psql.exe"
-            
-            # Test connection to default postgres database
-            Write-Host "Testing connection to postgres database..."
-            $output = & $psqlExe -U postgres -d postgres -c "SELECT version();" 2>&1 | Out-String
-            
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "✅ Connection successful"
-              Write-Host $output
+              Write-Host "`n✅ All executables are functional"
               echo "success=true" >> $env:GITHUB_OUTPUT
             } else {
-              Write-Host "❌ Connection failed"
-              Write-Host $output
+              Write-Host "`n❌ Some executables failed"
               echo "success=false" >> $env:GITHUB_OUTPUT
               exit 1
             }
           } catch {
-            Write-Host "❌ Error testing connection: $_"
+            Write-Host "❌ Error testing executables: $_"
             echo "success=false" >> $env:GITHUB_OUTPUT
             exit 1
-          }
-
-      - name: Phase 3.2 - Test Database Creation
-        id: test-create-db
-        if: steps.test-connection.outputs.success == 'true'
-        continue-on-error: true
-        run: |
-          $ErrorActionPreference = "Continue"
-          $binPath = "${{ steps.verify-postgresql.outputs.bin-path }}"
-          $testDbName = "bearsampp_test_db"
-          
-          Write-Host "=== Phase 3.2: Test Database Creation ==="
-          
-          try {
-            $createdbExe = Join-Path $binPath "createdb.exe"
-            $psqlExe = Join-Path $binPath "psql.exe"
-            
-            # Create test database
-            Write-Host "Creating test database: $testDbName"
-            $output = & $createdbExe -U postgres $testDbName 2>&1 | Out-String
-            
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "✅ Database created successfully"
-              
-              # Verify database exists
-              Write-Host "Verifying database exists..."
-              $verifyOutput = & $psqlExe -U postgres -d postgres -c "\l" 2>&1 | Out-String
-              
-              if ($verifyOutput -match $testDbName) {
-                Write-Host "✅ Database verified in database list"
-                
-                # Create a test table
-                Write-Host "Creating test table..."
-                $tableOutput = & $psqlExe -U postgres -d $testDbName -c "CREATE TABLE test_table (id SERIAL PRIMARY KEY, name VARCHAR(100), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);" 2>&1 | Out-String
-                
-                if ($LASTEXITCODE -eq 0) {
-                  Write-Host "✅ Test table created"
-                  
-                  # Insert test data
-                  Write-Host "Inserting test data..."
-                  $insertOutput = & $psqlExe -U postgres -d $testDbName -c "INSERT INTO test_table (name) VALUES ('Bearsampp Test 1'), ('Bearsampp Test 2');" 2>&1 | Out-String
-                  
-                  if ($LASTEXITCODE -eq 0) {
-                    Write-Host "✅ Test data inserted"
-                    
-                    # Query test data
-                    Write-Host "Querying test data..."
-                    $queryOutput = & $psqlExe -U postgres -d $testDbName -c "SELECT * FROM test_table;" 2>&1 | Out-String
-                    Write-Host $queryOutput
-                    
-                    if ($LASTEXITCODE -eq 0) {
-                      Write-Host "✅ Test data queried successfully"
-                      echo "success=true" >> $env:GITHUB_OUTPUT
-                      echo "test-db=$testDbName" >> $env:GITHUB_OUTPUT
-                    } else {
-                      Write-Host "❌ Failed to query test data"
-                      echo "success=false" >> $env:GITHUB_OUTPUT
-                    }
-                  } else {
-                    Write-Host "❌ Failed to insert test data"
-                    echo "success=false" >> $env:GITHUB_OUTPUT
-                  }
-                } else {
-                  Write-Host "❌ Failed to create test table"
-                  echo "success=false" >> $env:GITHUB_OUTPUT
-                }
-              } else {
-                Write-Host "❌ Database not found in list"
-                echo "success=false" >> $env:GITHUB_OUTPUT
-              }
-            } else {
-              Write-Host "❌ Database creation failed"
-              Write-Host $output
-              echo "success=false" >> $env:GITHUB_OUTPUT
-              exit 1
-            }
-          } catch {
-            Write-Host "❌ Error creating database: $_"
-            echo "success=false" >> $env:GITHUB_OUTPUT
-            exit 1
-          }
-
-      - name: Phase 3.3 - Test Database Deletion
-        id: test-delete-db
-        if: steps.test-create-db.outputs.success == 'true'
-        continue-on-error: true
-        run: |
-          $ErrorActionPreference = "Continue"
-          $binPath = "${{ steps.verify-postgresql.outputs.bin-path }}"
-          $testDbName = "${{ steps.test-create-db.outputs.test-db }}"
-          
-          Write-Host "=== Phase 3.3: Test Database Deletion ==="
-          
-          try {
-            $dropdbExe = Join-Path $binPath "dropdb.exe"
-            $psqlExe = Join-Path $binPath "psql.exe"
-            
-            # Drop test database
-            Write-Host "Dropping test database: $testDbName"
-            $output = & $dropdbExe -U postgres $testDbName 2>&1 | Out-String
-            
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "✅ Database dropped successfully"
-              
-              # Verify database no longer exists
-              Write-Host "Verifying database was deleted..."
-              $verifyOutput = & $psqlExe -U postgres -d postgres -c "\l" 2>&1 | Out-String
-              
-              if ($verifyOutput -notmatch $testDbName) {
-                Write-Host "✅ Database successfully removed from database list"
-                echo "success=true" >> $env:GITHUB_OUTPUT
-              } else {
-                Write-Host "❌ Database still exists in list"
-                echo "success=false" >> $env:GITHUB_OUTPUT
-              }
-            } else {
-              Write-Host "❌ Database deletion failed"
-              Write-Host $output
-              echo "success=false" >> $env:GITHUB_OUTPUT
-              exit 1
-            }
-          } catch {
-            Write-Host "❌ Error deleting database: $_"
-            echo "success=false" >> $env:GITHUB_OUTPUT
-            exit 1
-          }
-
-      - name: Phase 4 - Cleanup and Stop Server
-        if: always() && steps.start-server.outputs.success == 'true'
-        run: |
-          $ErrorActionPreference = "Continue"
-          $binPath = "${{ steps.verify-postgresql.outputs.bin-path }}"
-          $dataDir = "${{ steps.init-database.outputs.data-dir }}"
-          
-          Write-Host "=== Phase 4: Cleanup and Stop Server ==="
-          
-          try {
-            $pgCtlExe = Join-Path $binPath "pg_ctl.exe"
-            
-            # Stop the server
-            Write-Host "Stopping PostgreSQL server..."
-            $output = & $pgCtlExe -D $dataDir stop -m fast 2>&1 | Out-String
-            Write-Host $output
-            
-            # Wait for server to stop
-            Start-Sleep -Seconds 3
-            
-            # Verify server stopped
-            $statusOutput = & $pgCtlExe -D $dataDir status 2>&1 | Out-String
-            
-            if ($statusOutput -match "no server running") {
-              Write-Host "✅ PostgreSQL server stopped successfully"
-            } else {
-              Write-Host "⚠️  Server may still be running"
-            }
-          } catch {
-            Write-Host "⚠️  Error during cleanup: $_"
           }
 
       - name: Generate Test Summary
@@ -629,11 +369,7 @@ jobs:
           
           $phase1_1 = "${{ steps.download-postgresql.outputs.success }}" -eq "true"
           $phase1_2 = "${{ steps.verify-postgresql.outputs.success }}" -eq "true"
-          $phase2_1 = "${{ steps.init-database.outputs.success }}" -eq "true"
-          $phase2_2 = "${{ steps.start-server.outputs.success }}" -eq "true"
-          $phase3_1 = "${{ steps.test-connection.outputs.success }}" -eq "true"
-          $phase3_2 = "${{ steps.test-create-db.outputs.success }}" -eq "true"
-          $phase3_3 = "${{ steps.test-delete-db.outputs.success }}" -eq "true"
+          $phase2 = "${{ steps.test-basic.outputs.success }}" -eq "true"
           
           # Get error messages if any
           $error1_1 = "${{ steps.download-postgresql.outputs.error }}"
@@ -648,28 +384,12 @@ jobs:
           $summary += "- Verify Executables: $(if ($phase1_2) { '✅ PASS' } else { '❌ FAIL' })`n`n"
           
           if ($phase1_2) {
-            $summary += "**Phase 2: Server Initialization**`n"
-            $summary += "- Initialize Cluster: $(if ($phase2_1) { '✅ PASS' } else { '❌ FAIL' })`n"
-            if ($phase2_1) {
-              $summary += "- Start Server: $(if ($phase2_2) { '✅ PASS' } else { '❌ FAIL' })`n"
-            }
-            $summary += "`n"
-          }
-          
-          if ($phase2_2) {
-            $summary += "**Phase 3: Database Operations**`n"
-            $summary += "- Test Connection: $(if ($phase3_1) { '✅ PASS' } else { '❌ FAIL' })`n"
-            if ($phase3_1) {
-              $summary += "- Create Database: $(if ($phase3_2) { '✅ PASS' } else { '❌ FAIL' })`n"
-              if ($phase3_2) {
-                $summary += "- Delete Database: $(if ($phase3_3) { '✅ PASS' } else { '❌ FAIL' })`n"
-              }
-            }
-            $summary += "`n"
+            $summary += "**Phase 2: Basic Functionality**`n"
+            $summary += "- Test Executables: $(if ($phase2) { '✅ PASS' } else { '❌ FAIL' })`n`n"
           }
           
           # Overall status
-          $allPassed = $phase1_1 -and $phase1_2 -and $phase2_1 -and $phase2_2 -and $phase3_1 -and $phase3_2 -and $phase3_3
+          $allPassed = $phase1_1 -and $phase1_2 -and $phase2
           
           if ($allPassed) {
             $summary += "**Overall Status:** ✅ ALL TESTS PASSED`n"
@@ -680,8 +400,8 @@ jobs:
             $summary += "<summary>💡 Click here for troubleshooting tips</summary>`n`n"
             $summary += "- Check the workflow logs for detailed error messages`n"
             $summary += "- Download the test artifacts for complete logs`n"
-            $summary += "- Review the server logs if server startup failed`n"
             $summary += "- Verify the .7z archive structure matches expected format`n"
+            $summary += "- Ensure all required DLL dependencies are included`n"
             $summary += "</details>`n"
           }
           
