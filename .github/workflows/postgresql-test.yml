@@ -6,6 +6,12 @@ on:
       - main
       - develop
     types: [opened, synchronize, reopened, edited]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Specific PostgreSQL version to test (e.g., 16.9, 17.5) - leave empty to test latest 5'
+        required: false
+        type: string
 
 jobs:
   detect-versions:
@@ -42,6 +48,8 @@ jobs:
 
       - name: Get PostgreSQL Versions
         id: get-versions
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.event.inputs.version }}" != "" ]; then
             # Manual workflow with specific version
@@ -50,22 +58,14 @@ jobs:
             VERSIONS="[\"$VERSION\"]"
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
             # For PRs, detect which versions were added or modified
-            echo "Detecting versions changed in this PR..."
-            echo "Base ref: ${{ github.base_ref }}"
-            echo "Head ref: ${{ github.head_ref }}"
+            echo "Detecting versions changed in PR #${{ github.event.pull_request.number }}"
             
-            # Get changed lines in releases.properties using GitHub's merge base
-            CHANGED_VERSIONS=$(git diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} -- releases.properties 2>/dev/null | \
-              grep "^+" | \
-              grep -v "^+++" | \
-              grep -E "^\\+[0-9]+\\.[0-9]+" | \
-              sed 's/^+//' | \
-              cut -d'=' -f1 | \
-              tr -d ' ' | \
-              grep -v -E "(RC|beta|alpha)" || true)
+            # Get the diff from GitHub API
+            DIFF=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files \
+              --jq '.[] | select(.filename == "releases.properties") | .patch' 2>/dev/null || echo "")
             
-            if [ -z "$CHANGED_VERSIONS" ]; then
-              echo "No version changes detected in releases.properties"
+            if [ -z "$DIFF" ]; then
+              echo "No changes to releases.properties detected"
               echo "Testing latest 5 stable versions as fallback"
               VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
                 grep -v -E "(RC|beta|alpha)" | \
@@ -73,18 +73,40 @@ jobs:
                 tr -d ' ' | \
                 jq -R -s -c 'split("\n") | map(select(length > 0)) | unique | sort_by(split(".") | map(tonumber)) | reverse | .[0:5]')
             else
-              echo "Changed versions detected:"
-              echo "$CHANGED_VERSIONS"
-              VERSIONS=$(echo "$CHANGED_VERSIONS" | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
+              echo "Analyzing diff for added/modified versions..."
+              
+              # Extract added lines (lines starting with +) that contain version numbers
+              CHANGED_VERSIONS=$(echo "$DIFF" | \
+                grep "^+" | \
+                grep -v "^+++" | \
+                grep -E "^\+[0-9]+\.[0-9]+" | \
+                sed 's/^+//' | \
+                cut -d'=' -f1 | \
+                tr -d ' ' | \
+                grep -v -E "(RC|beta|alpha)" || echo "")
+              
+              if [ -z "$CHANGED_VERSIONS" ]; then
+                echo "No new stable versions found in PR"
+                echo "Testing latest 5 stable versions as fallback"
+                VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
+                  grep -v -E "(RC|beta|alpha)" | \
+                  cut -d'=' -f1 | \
+                  tr -d ' ' | \
+                  jq -R -s -c 'split("\n") | map(select(length > 0)) | unique | sort_by(split(".") | map(tonumber)) | reverse | .[0:5]')
+              else
+                echo "Changed versions detected:"
+                echo "$CHANGED_VERSIONS"
+                VERSIONS=$(echo "$CHANGED_VERSIONS" | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
+              fi
             fi
           else
             # For other events, test latest 5 stable versions
+            echo "Testing latest 5 stable versions (excluding RC/beta/alpha)"
             VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
               grep -v -E "(RC|beta|alpha)" | \
               cut -d'=' -f1 | \
               tr -d ' ' | \
               jq -R -s -c 'split("\n") | map(select(length > 0)) | unique | sort_by(split(".") | map(tonumber)) | reverse | .[0:5]')
-            echo "Testing latest 5 stable versions (excluding RC/beta/alpha)"
           fi
           
           echo "versions=$VERSIONS" >> $GITHUB_OUTPUT
