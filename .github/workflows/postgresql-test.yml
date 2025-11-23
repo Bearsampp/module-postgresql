@@ -358,6 +358,7 @@ jobs:
         id: start-server
         if: steps.init-database.outputs.success == 'true'
         continue-on-error: true
+        timeout-minutes: 3
         run: |
           $ErrorActionPreference = "Continue"
           $binPath = "${{ steps.verify-postgresql.outputs.bin-path }}"
@@ -369,21 +370,44 @@ jobs:
           try {
             $pgCtlExe = Join-Path $binPath "pg_ctl.exe"
             
-            # Start the server
+            # Start the server with timeout
             Write-Host "Starting PostgreSQL server..."
-            $output = & $pgCtlExe -D $dataDir -l $logFile start 2>&1 | Out-String
-            Write-Host $output
+            $startJob = Start-Job -ScriptBlock {
+              param($pgCtl, $data, $log)
+              & $pgCtl -D $data -l $log -w -t 30 start 2>&1 | Out-String
+            } -ArgumentList $pgCtlExe, $dataDir, $logFile
             
-            # Wait for server to be ready
-            Write-Host "Waiting for server to be ready..."
-            Start-Sleep -Seconds 5
+            # Wait for the job with timeout
+            $completed = Wait-Job -Job $startJob -Timeout 60
+            
+            if ($completed) {
+              $output = Receive-Job -Job $startJob
+              Write-Host $output
+              Remove-Job -Job $startJob -Force
+            } else {
+              Write-Host "⚠️  Server start timed out after 60 seconds"
+              Stop-Job -Job $startJob
+              Remove-Job -Job $startJob -Force
+            }
+            
+            # Wait a bit for server to stabilize
+            Write-Host "Waiting for server to stabilize..."
+            Start-Sleep -Seconds 3
             
             # Check server status
+            Write-Host "Checking server status..."
             $statusOutput = & $pgCtlExe -D $dataDir status 2>&1 | Out-String
             Write-Host $statusOutput
             
             if ($statusOutput -match "server is running") {
               Write-Host "✅ PostgreSQL server is running"
+              
+              # Display server log
+              if (Test-Path $logFile) {
+                Write-Host "Server log (last 20 lines):"
+                Get-Content $logFile -Tail 20 | Write-Host
+              }
+              
               echo "success=true" >> $env:GITHUB_OUTPUT
               echo "log-file=$logFile" >> $env:GITHUB_OUTPUT
             } else {
@@ -397,6 +421,7 @@ jobs:
             }
           } catch {
             Write-Host "❌ Error starting server: $_"
+            Write-Host "Error details: $($_.Exception.Message)"
             if (Test-Path $logFile) {
               Write-Host "Server log:"
               Get-Content $logFile | Write-Host
