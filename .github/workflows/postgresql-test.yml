@@ -128,7 +128,7 @@ jobs:
   test-postgresql:
     name: Test PostgreSQL ${{ matrix.version }}
     needs: detect-versions
-    if: needs.detect-versions.outputs.has-changes == 'true'
+    if: needs.detect-versions.outputs.has-changes == 'true' && needs.detect-versions.outputs.versions != '[]'
     runs-on: windows-latest
     strategy:
       fail-fast: false
