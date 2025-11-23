@@ -48,8 +48,37 @@ jobs:
             VERSION="${{ github.event.inputs.version }}"
             echo "Testing specific version: $VERSION"
             VERSIONS="[\"$VERSION\"]"
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+            # For PRs, detect which versions were added or modified
+            echo "Detecting versions changed in this PR..."
+            echo "Base ref: ${{ github.base_ref }}"
+            echo "Head ref: ${{ github.head_ref }}"
+            
+            # Get changed lines in releases.properties using GitHub's merge base
+            CHANGED_VERSIONS=$(git diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} -- releases.properties 2>/dev/null | \
+              grep "^+" | \
+              grep -v "^+++" | \
+              grep -E "^\\+[0-9]+\\.[0-9]+" | \
+              sed 's/^+//' | \
+              cut -d'=' -f1 | \
+              tr -d ' ' | \
+              grep -v -E "(RC|beta|alpha)" || true)
+            
+            if [ -z "$CHANGED_VERSIONS" ]; then
+              echo "No version changes detected in releases.properties"
+              echo "Testing latest 5 stable versions as fallback"
+              VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
+                grep -v -E "(RC|beta|alpha)" | \
+                cut -d'=' -f1 | \
+                tr -d ' ' | \
+                jq -R -s -c 'split("\n") | map(select(length > 0)) | unique | sort_by(split(".") | map(tonumber)) | reverse | .[0:5]')
+            else
+              echo "Changed versions detected:"
+              echo "$CHANGED_VERSIONS"
+              VERSIONS=$(echo "$CHANGED_VERSIONS" | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
+            fi
           else
-            # Get all versions from releases.properties, excluding RC/beta versions
+            # For other events, test latest 5 stable versions
             VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
               grep -v -E "(RC|beta|alpha)" | \
               cut -d'=' -f1 | \

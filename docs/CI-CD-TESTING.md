@@ -13,7 +13,24 @@ The PostgreSQL testing workflow is triggered automatically on:
 
 ## Test Scope
 
-The workflow tests the **latest 5 PostgreSQL versions** from `releases.properties` by default. This ensures recent versions are validated while keeping CI runtime reasonable.
+The workflow intelligently determines which versions to test based on the context:
+
+### Pull Request Testing
+- **Smart Detection**: Automatically detects which PostgreSQL versions were added or modified in the PR
+- **Targeted Testing**: Only tests the versions that changed in `releases.properties`
+- **Efficiency**: Reduces CI runtime by testing only relevant versions
+- **Fallback**: If no version changes detected, tests the latest 5 stable versions
+- **Exclusions**: Automatically excludes RC (Release Candidate), beta, and alpha versions
+
+### Manual Testing
+- Tests a specific version provided as input parameter
+- Useful for re-testing or validating specific versions
+
+### Example Scenarios
+- **Add PostgreSQL 17.5**: Only version 17.5 is tested
+- **Add versions 16.9 and 17.5**: Both versions are tested
+- **Modify existing version URL**: That specific version is tested
+- **Non-version changes**: Latest 5 stable versions tested as fallback
 
 ## Test Phases
 
@@ -149,10 +166,33 @@ Each version's summary includes:
 
 ## Error Handling
 
+The workflow provides comprehensive error reporting at multiple levels:
+
+### Detailed Error Messages
+
+Each phase captures and reports specific error information:
+
+- **Download failures**: HTTP status codes, error messages, attempted URLs
+- **Extraction failures**: 7-Zip exit codes, output logs, directory listings
+- **Missing files**: Expected vs. actual directory structure
+- **Server failures**: Complete server logs, initialization output
+- **Database operation failures**: SQL error messages, connection details
+
+### Error Propagation
+
 - Each phase uses `continue-on-error: true` to allow subsequent phases to run
-- Failed phases are clearly marked in the summary
+- Failed phases are clearly marked in the summary with ❌ indicators
+- Error messages are included inline in test summaries
 - Server logs are always uploaded for debugging
 - Cleanup phase always runs to prevent resource leaks
+
+### Troubleshooting Assistance
+
+When tests fail, the summary includes:
+- Specific error messages for each failed phase
+- Collapsible troubleshooting tips section
+- Links to detailed workflow logs
+- References to downloadable artifacts
 
 ## Platform
 
