@@ -68,7 +68,9 @@ jobs:
               VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
                 cut -d'=' -f1 | \
                 tr -d ' ' | \
-                jq -R -s -c 'split("\n") | map(select(length > 0)) | unique | sort_by(split(".") | map(tonumber)) | reverse | .[0:5]')
+                sort -V -r | \
+                head -5 | \
+                jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
             fi
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
             # For PRs, detect which versions were added or modified using GitHub API
@@ -86,7 +88,9 @@ jobs:
               VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
                 cut -d'=' -f1 | \
                 tr -d ' ' | \
-                jq -R -s -c 'split("\n") | map(select(length > 0)) | unique | sort_by(split(".") | map(tonumber)) | reverse | .[0:5]')
+                sort -V -r | \
+                head -5 | \
+                jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
             else
               echo "Analyzing diff for added/modified versions..."
               
@@ -106,7 +110,9 @@ jobs:
                 VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
                   cut -d'=' -f1 | \
                   tr -d ' ' | \
-                  jq -R -s -c 'split("\n") | map(select(length > 0)) | unique | sort_by(split(".") | map(tonumber)) | reverse | .[0:5]')
+                  sort -V -r | \
+                  head -5 | \
+                  jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
               else
                 echo "Versions detected in PR:"
                 echo "$CHANGED_VERSIONS"
