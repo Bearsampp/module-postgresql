@@ -8,8 +8,16 @@ on:
     types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
     inputs:
+      test_mode:
+        description: 'Test mode'
+        required: true
+        type: choice
+        options:
+          - 'Latest 5 versions'
+          - 'Specific version'
+        default: 'Latest 5 versions'
       version:
-        description: 'Specific PostgreSQL version to test (e.g., 16.9, 17.5) - leave empty to test latest 5'
+        description: 'Specific version to test (only if "Specific version" is selected)'
         required: false
         type: string
 
@@ -49,11 +57,19 @@ jobs:
       - name: Get PostgreSQL Versions
         id: get-versions
         run: |
-          if [ "${{ github.event.inputs.version }}" != "" ]; then
-            # Manual workflow with specific version
-            VERSION="${{ github.event.inputs.version }}"
-            echo "Testing specific version: $VERSION"
-            VERSIONS="[\"$VERSION\"]"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # Manual workflow
+            if [ "${{ github.event.inputs.test_mode }}" == "Specific version" ] && [ "${{ github.event.inputs.version }}" != "" ]; then
+              VERSION="${{ github.event.inputs.version }}"
+              echo "Testing specific version: $VERSION"
+              VERSIONS="[\"$VERSION\"]"
+            else
+              echo "Testing latest 5 versions (including RC/beta/alpha)"
+              VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
+                cut -d'=' -f1 | \
+                tr -d ' ' | \
+                jq -R -s -c 'split("\n") | map(select(length > 0)) | unique | sort_by(split(".") | map(tonumber)) | reverse | .[0:5]')
+            fi
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
             # For PRs, detect which versions were added or modified using GitHub API
             echo "Detecting versions changed in PR #${{ github.event.pull_request.number }}"
@@ -66,44 +82,41 @@ jobs:
             
             if [ -z "$PATCH" ]; then
               echo "No changes to releases.properties detected"
-              echo "Testing latest 5 stable versions as fallback"
+              echo "Testing latest 5 versions as fallback"
               VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
-                grep -v -E "(RC|beta|alpha)" | \
                 cut -d'=' -f1 | \
                 tr -d ' ' | \
                 jq -R -s -c 'split("\n") | map(select(length > 0)) | unique | sort_by(split(".") | map(tonumber)) | reverse | .[0:5]')
             else
               echo "Analyzing diff for added/modified versions..."
               
-              # Extract added lines (lines starting with +) that contain version numbers
+              # Extract ALL added lines (lines starting with +) that contain version numbers
+              # Test ALL versions added in the PR (including RC/beta/alpha)
               CHANGED_VERSIONS=$(echo "$PATCH" | \
                 grep "^+" | \
                 grep -v "^+++" | \
                 grep -E "^\+[0-9]+\.[0-9]+" | \
                 sed 's/^+//' | \
                 cut -d'=' -f1 | \
-                tr -d ' ' | \
-                grep -v -E "(RC|beta|alpha)" || echo "")
+                tr -d ' ' || echo "")
               
               if [ -z "$CHANGED_VERSIONS" ]; then
-                echo "No new stable versions found in PR"
-                echo "Testing latest 5 stable versions as fallback"
+                echo "No version changes found in PR"
+                echo "Testing latest 5 versions as fallback"
                 VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
-                  grep -v -E "(RC|beta|alpha)" | \
                   cut -d'=' -f1 | \
                   tr -d ' ' | \
                   jq -R -s -c 'split("\n") | map(select(length > 0)) | unique | sort_by(split(".") | map(tonumber)) | reverse | .[0:5]')
               else
-                echo "Changed versions detected:"
+                echo "Versions detected in PR:"
                 echo "$CHANGED_VERSIONS"
                 VERSIONS=$(echo "$CHANGED_VERSIONS" | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
               fi
             fi
           else
-            # For other events, test latest 5 stable versions
-            echo "Testing latest 5 stable versions (excluding RC/beta/alpha)"
+            # For other events, test latest 5 versions
+            echo "Testing latest 5 versions"
             VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
-              grep -v -E "(RC|beta|alpha)" | \
               cut -d'=' -f1 | \
               tr -d ' ' | \
               jq -R -s -c 'split("\n") | map(select(length > 0)) | unique | sort_by(split(".") | map(tonumber)) | reverse | .[0:5]')
@@ -475,12 +488,10 @@ jobs:
           echo "### 📋 Test Phases" >> comment.md
           echo "" >> comment.md
           echo "Each version is tested through the following phases:" >> comment.md
-          echo "- **Phase 1:** Installation Validation (Download, Extract, Verify)" >> comment.md
-          echo "- **Phase 2:** Server Initialization (Init Cluster, Start Server)" >> comment.md
-          echo "- **Phase 3:** Database Operations (Connect, Create DB, Delete DB)" >> comment.md
-          echo "- **Phase 4:** Cleanup (Stop Server)" >> comment.md
+          echo "- **Phase 1:** Installation Validation (Download, Extract, Verify Executables)" >> comment.md
+          echo "- **Phase 2:** Basic Functionality (Test Executable Versions)" >> comment.md
           echo "" >> comment.md
-          echo "_Check artifacts for detailed logs and server output._" >> comment.md
+          echo "_Check artifacts for detailed logs._" >> comment.md
           
           cat comment.md
 
