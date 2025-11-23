@@ -638,13 +638,31 @@ jobs:
 
       - name: Generate PR Comment
         run: |
-          echo "## 🐘 PostgreSQL Module Tests - Complete Results" > comment.md
+          echo "## 🐘 PostgreSQL Module Tests - Results" > comment.md
           echo "" >> comment.md
           echo "**Test Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> comment.md
+          
+          # Determine overall test status
+          TEST_STATUS="${{ needs.test-postgresql.result }}"
+          if [ "$TEST_STATUS" = "success" ]; then
+            echo "**Status:** ✅ All tests passed" >> comment.md
+          elif [ "$TEST_STATUS" = "failure" ]; then
+            echo "**Status:** ❌ Some tests failed" >> comment.md
+          else
+            echo "**Status:** ⚠️ Tests completed with issues" >> comment.md
+          fi
+          
           echo "" >> comment.md
           
           # Check if artifacts exist
           if [ -d "all-results" ]; then
+            # Count expected vs actual results
+            EXPECTED_COUNT=$(echo '${{ needs.detect-versions.outputs.versions }}' | jq '. | length')
+            ACTUAL_COUNT=$(find all-results -name "summary.md" 2>/dev/null | wc -l)
+            
+            echo "**Results:** $ACTUAL_COUNT of $EXPECTED_COUNT versions tested" >> comment.md
+            echo "" >> comment.md
+            
             for version_dir in all-results/test-results-postgresql-*; do
               if [ -d "$version_dir" ]; then
                 for summary_file in "$version_dir"/summary.md; do
@@ -664,13 +682,13 @@ jobs:
           echo "" >> comment.md
           echo "### 📋 Test Phases" >> comment.md
           echo "" >> comment.md
-          echo "✅ **Completed:**" >> comment.md
-          echo "- Phase 1: Installation Validation (Download, Extract, Verify)" >> comment.md
-          echo "- Phase 2: Server Initialization (Init Cluster, Start Server)" >> comment.md
-          echo "- Phase 3: Database Operations (Connect, Create DB, Delete DB)" >> comment.md
-          echo "- Phase 4: Cleanup (Stop Server)" >> comment.md
+          echo "Each version is tested through the following phases:" >> comment.md
+          echo "- **Phase 1:** Installation Validation (Download, Extract, Verify)" >> comment.md
+          echo "- **Phase 2:** Server Initialization (Init Cluster, Start Server)" >> comment.md
+          echo "- **Phase 3:** Database Operations (Connect, Create DB, Delete DB)" >> comment.md
+          echo "- **Phase 4:** Cleanup (Stop Server)" >> comment.md
           echo "" >> comment.md
-          echo "_All phases of PostgreSQL testing are complete! Check artifacts for detailed logs._" >> comment.md
+          echo "_Check artifacts for detailed logs and server output._" >> comment.md
           
           cat comment.md
 
