@@ -416,14 +416,6 @@ jobs:
           path: test-results/
           retention-days: 30
 
-      - name: Upload Server Logs
-        if: always() && steps.start-server.outputs.success == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: server-logs-postgresql-${{ matrix.version }}
-          path: test-results/postgresql.log
-          retention-days: 7
-
   report-results:
     name: Report Test Results
     needs: [detect-versions, test-postgresql]
