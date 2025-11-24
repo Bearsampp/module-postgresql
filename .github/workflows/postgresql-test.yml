@@ -73,10 +73,10 @@ jobs:
                 jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
             fi
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
-            # For PRs, detect which versions were added or modified using GitHub API
-            echo "Detecting versions changed in PR #${{ github.event.pull_request.number }}"
+            # For PRs, detect which versions were added or modified using smart detection
+            echo "=== Smart Version Detection for PR #${{ github.event.pull_request.number }} ==="
             
-            # Get the list of changed files first
+            # Get the list of changed files
             echo "Fetching changed files from PR..."
             CHANGED_FILES=$(curl -s -H "Authorization: token ${{ github.token }}" \
               -H "Accept: application/vnd.github.v3+json" \
@@ -86,46 +86,61 @@ jobs:
             echo "Changed files in PR:"
             echo "$CHANGED_FILES"
             
-            # Check if releases.properties was changed
-            if echo "$CHANGED_FILES" | grep -q "^releases.properties$"; then
-              echo "releases.properties was modified in this PR"
-              
-              # Get the diff from GitHub API using curl
-              PATCH=$(curl -s -H "Authorization: token ${{ github.token }}" \
-                -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" | \
-                jq -r '.[] | select(.filename == "releases.properties") | .patch')
-              
-              echo "Analyzing diff for added/modified versions..."
-              
-              # Extract ALL added lines (lines starting with +) that contain version numbers
-              # Test ALL versions added in the PR (including RC/beta/alpha)
-              CHANGED_VERSIONS=$(echo "$PATCH" | \
-                grep "^+" | \
-                grep -v "^+++" | \
-                grep -E "^\+[0-9]+\.[0-9]+" | \
-                sed 's/^+//' | \
-                cut -d'=' -f1 | \
-                tr -d ' ')
-              
-              if [ -z "$CHANGED_VERSIONS" ]; then
-                echo "No new versions found in releases.properties changes"
-                echo "Testing latest 5 versions as fallback"
-                VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
-                  cut -d'=' -f1 | \
-                  tr -d ' ' | \
-                  sort -V -r | \
-                  head -5 | \
-                  jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
-              else
-                echo "Versions detected in PR:"
-                echo "$CHANGED_VERSIONS"
-                VERSIONS=$(echo "$CHANGED_VERSIONS" | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
-              fi
+            # Primary Method: Extract version numbers from changed files in /bin directory
+            echo ""
+            echo "Primary Method: Checking /bin directory for version changes..."
+            BIN_VERSIONS=$(echo "$CHANGED_FILES" | \
+              grep "^bin/postgresql[0-9]" | \
+              sed -E 's|^bin/postgresql([0-9]+\.[0-9]+)/.*|\1|' | \
+              sort -u)
+            
+            if [ -n "$BIN_VERSIONS" ]; then
+              echo "✅ Versions detected from /bin directory:"
+              echo "$BIN_VERSIONS"
+              VERSIONS=$(echo "$BIN_VERSIONS" | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
             else
-              echo "releases.properties was NOT modified in this PR"
-              echo "Skipping tests - no versions to test"
-              VERSIONS="[]"
+              echo "❌ No versions found in /bin directory changes"
+              
+              # Fallback Method: Extract version numbers from PR title
+              echo ""
+              echo "Fallback Method: Checking PR title for version numbers..."
+              PR_TITLE="${{ github.event.pull_request.title }}"
+              echo "PR Title: $PR_TITLE"
+              
+              # Extract version patterns like 17.5, 16.11, etc. from PR title
+              TITLE_VERSIONS=$(echo "$PR_TITLE" | \
+                grep -oE '[0-9]+\.[0-9]+' | \
+                sort -u)
+              
+              if [ -n "$TITLE_VERSIONS" ]; then
+                echo "✅ Versions detected from PR title:"
+                echo "$TITLE_VERSIONS"
+                
+                # Verify these versions exist in releases.properties
+                VALID_VERSIONS=""
+                INVALID_VERSIONS=""
+                for version in $TITLE_VERSIONS; do
+                  if grep -q "^${version}\s*=" releases.properties; then
+                    echo "  ✓ Version $version found in releases.properties"
+                    VALID_VERSIONS="${VALID_VERSIONS}${version}"$'\n'
+                  else
+                    echo "  ✗ Version $version NOT found in releases.properties"
+                    INVALID_VERSIONS="${INVALID_VERSIONS}${version}"$'\n'
+                  fi
+                done
+                
+                if [ -n "$VALID_VERSIONS" ]; then
+                  VERSIONS=$(echo "$VALID_VERSIONS" | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
+                else
+                  echo "❌ No valid versions found in PR title"
+                  echo "⏭️  Skipping tests - no valid versions to test"
+                  VERSIONS="[]"
+                fi
+              else
+                echo "❌ No version numbers found in PR title"
+                echo "⏭️  Skipping tests - no versions to test"
+                VERSIONS="[]"
+              fi
             fi
           else
             # For other events, test latest 5 versions
@@ -138,6 +153,8 @@ jobs:
               jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
           fi
           
+          echo ""
+          echo "=== Final Version Selection ==="
           echo "versions=$VERSIONS" >> $GITHUB_OUTPUT
           echo "Versions to test: $VERSIONS"
 

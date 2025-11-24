@@ -16,21 +16,69 @@ The PostgreSQL testing workflow is triggered automatically on:
 The workflow intelligently determines which versions to test based on the context:
 
 ### Pull Request Testing
-- **Smart Detection**: Automatically detects which PostgreSQL versions were added or modified in the PR
-- **Targeted Testing**: Only tests the versions that changed in `releases.properties`
-- **Efficiency**: Reduces CI runtime by testing only relevant versions
-- **Fallback**: If no version changes detected, tests the latest 5 stable versions
-- **Exclusions**: Automatically excludes RC (Release Candidate), beta, and alpha versions
+
+**Smart Detection**: Automatically detects which PostgreSQL versions are included in the PR using a three-tier detection system:
+
+#### Primary Method: /bin Directory Detection
+- Extracts version numbers from changed files in the `/bin` directory
+- Pattern: `bin/postgresql{VERSION}/` (e.g., `bin/postgresql17.5/`, `bin/postgresql16.11/`)
+- Most reliable method as it directly detects new version directories
+- **Example**: If PR adds files to `bin/postgresql17.5/`, version `17.5` is tested
+
+#### Fallback Method: PR Title Detection
+- If no versions found in `/bin`, extracts version numbers from the PR title
+- Pattern: Matches version numbers like `17.5`, `16.11`, `18.1`, etc.
+- Validates that detected versions exist in `releases.properties`
+- **Example**: PR title "Add PostgreSQL 17.5 and 16.11" → tests versions `17.5` and `16.11`
+- If no valid versions found in title, tests are skipped
+
+**Efficiency**: Reduces CI runtime by testing only relevant versions instead of all versions
 
 ### Manual Testing
 - Tests a specific version provided as input parameter
 - Useful for re-testing or validating specific versions
+- Can also test latest 5 versions on demand
+
+### How It Works
+
+The typical workflow for adding new PostgreSQL versions:
+
+1. **Pre-release Creation**: New versions are added to a pre-release (tagged with date, e.g., "2025.01.23")
+2. **Version Directories**: Version directories are created in `/bin` (e.g., `bin/postgresql17.5/`, `bin/postgresql16.11/`)
+3. **Properties Update**: The `releases.properties` file is updated with download URLs
+4. **PR Creation**: A PR is created from a release branch (e.g., "January") to `main`
+5. **Smart Detection**: This workflow detects changed files in `/bin` and extracts version numbers from directory names
+6. **Targeted Testing**: Tests are run only against the detected version(s)
 
 ### Example Scenarios
-- **Add PostgreSQL 17.5**: Only version 17.5 is tested
-- **Add versions 16.9 and 17.5**: Both versions are tested
-- **Modify existing version URL**: That specific version is tested
-- **Non-version changes**: Latest 5 stable versions tested as fallback
+
+#### Scenario 1: New Version in /bin
+- **PR Changes**: Adds `bin/postgresql17.5/` directory with files
+- **Detection**: Primary method detects version `17.5` from `/bin` path
+- **Result**: Only version `17.5` is tested ✅
+
+#### Scenario 2: Multiple Versions in /bin
+- **PR Changes**: Adds `bin/postgresql17.5/` and `bin/postgresql16.11/`
+- **Detection**: Primary method detects versions `17.5` and `16.11`
+- **Result**: Both versions are tested ✅
+
+#### Scenario 3: Version in PR Title
+- **PR Changes**: Documentation updates only
+- **PR Title**: "Update docs for PostgreSQL 17.5"
+- **Detection**: Fallback method extracts `17.5` from title
+- **Result**: Version `17.5` is tested (if it exists in `releases.properties`) ✅
+
+#### Scenario 4: No Version Detection
+- **PR Changes**: General code improvements
+- **PR Title**: "Refactor build scripts"
+- **Detection**: No versions found in `/bin` or title
+- **Result**: Tests are skipped - no versions to test ⏭️
+
+#### Scenario 5: Invalid Version in Title
+- **PR Changes**: Documentation updates
+- **PR Title**: "Add PostgreSQL 99.99 docs"
+- **Detection**: Version `99.99` extracted but not found in `releases.properties`
+- **Result**: Tests are skipped - no valid versions to test ⏭️
 
 ## Test Phases
 
