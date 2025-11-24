@@ -9,7 +9,7 @@ This document describes the automated testing workflow for the Bearsampp Postgre
 The PostgreSQL testing workflow is triggered automatically on:
 
 - **Pull Request Events**: When a PR is opened, synchronized (new commits pushed), reopened, or edited
-  - Target branches: `main` or `develop`
+  - Target branches: `main`
 
 ## Test Scope
 
