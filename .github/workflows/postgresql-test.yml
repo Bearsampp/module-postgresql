@@ -76,22 +76,26 @@ jobs:
             # For PRs, detect which versions were added or modified using GitHub API
             echo "Detecting versions changed in PR #${{ github.event.pull_request.number }}"
             
-            # Get the diff from GitHub API using curl
-            PATCH=$(curl -s -H "Authorization: token ${{ github.token }}" \
+            # Get the list of changed files first
+            echo "Fetching changed files from PR..."
+            CHANGED_FILES=$(curl -s -H "Authorization: token ${{ github.token }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" | \
-              jq -r '.[] | select(.filename == "releases.properties") | .patch' 2>/dev/null || echo "")
+              jq -r '.[].filename')
             
-            if [ -z "$PATCH" ]; then
-              echo "No changes to releases.properties detected"
-              echo "Testing latest 5 versions as fallback"
-              VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
-                cut -d'=' -f1 | \
-                tr -d ' ' | \
-                sort -V -r | \
-                head -5 | \
-                jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
-            else
+            echo "Changed files in PR:"
+            echo "$CHANGED_FILES"
+            
+            # Check if releases.properties was changed
+            if echo "$CHANGED_FILES" | grep -q "^releases.properties$"; then
+              echo "releases.properties was modified in this PR"
+              
+              # Get the diff from GitHub API using curl
+              PATCH=$(curl -s -H "Authorization: token ${{ github.token }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" | \
+                jq -r '.[] | select(.filename == "releases.properties") | .patch')
+              
               echo "Analyzing diff for added/modified versions..."
               
               # Extract ALL added lines (lines starting with +) that contain version numbers
@@ -102,10 +106,10 @@ jobs:
                 grep -E "^\+[0-9]+\.[0-9]+" | \
                 sed 's/^+//' | \
                 cut -d'=' -f1 | \
-                tr -d ' ' || echo "")
+                tr -d ' ')
               
               if [ -z "$CHANGED_VERSIONS" ]; then
-                echo "No version changes found in PR"
+                echo "No new versions found in releases.properties changes"
                 echo "Testing latest 5 versions as fallback"
                 VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
                   cut -d'=' -f1 | \
@@ -118,6 +122,10 @@ jobs:
                 echo "$CHANGED_VERSIONS"
                 VERSIONS=$(echo "$CHANGED_VERSIONS" | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
               fi
+            else
+              echo "releases.properties was NOT modified in this PR"
+              echo "Skipping tests - no versions to test"
+              VERSIONS="[]"
             fi
           else
             # For other events, test latest 5 versions
@@ -125,7 +133,9 @@ jobs:
             VERSIONS=$(grep -E "^[0-9]+\.[0-9]+" releases.properties | \
               cut -d'=' -f1 | \
               tr -d ' ' | \
-              jq -R -s -c 'split("\n") | map(select(length > 0)) | unique | sort_by(split(".") | map(tonumber)) | reverse | .[0:5]')
+              sort -V -r | \
+              head -5 | \
+              jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
           fi
           
           echo "versions=$VERSIONS" >> $GITHUB_OUTPUT
