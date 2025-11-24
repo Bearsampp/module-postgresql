@@ -79,6 +79,12 @@ jobs:
           module_name = os.environ['MODULE_NAME']
           github_token = os.environ['GITHUB_TOKEN']
           
+          # Strip module name prefix from tag if present (e.g., "postgresql-2025.11.22" -> "2025.11.22")
+          if release_tag.lower().startswith(f"{module_name.lower()}-"):
+              original_tag = release_tag
+              release_tag = release_tag[len(module_name)+1:]
+              print(f"Stripped module prefix from tag: {original_tag} -> {release_tag}")
+          
           print(f"Processing release: {release_tag}")
           print(f"Module name: {module_name}")
           
@@ -106,8 +112,15 @@ jobs:
               if filename.endswith('.7z'):
                   download_url = asset['browser_download_url']
                   
-                  # Extract version number (flexible pattern)
-                  version_match = re.search(r'(\d+\.\d+\.\d+(?:\.\d+)?)', filename)
+                  # Extract version number after module name (e.g., "bearsampp-postgresql-18.1-2025.7.2.7z" -> "18.1")
+                  # Pattern: module_name followed by version, then either a dash+date or .7z
+                  # Supports: 18.1, 17.2.3, 3.2.1.0, 17.0-RC1
+                  # The (?=-\d{4}\.|\.7z) ensures we stop before a date pattern or .7z extension
+                  version_match = re.search(
+                      rf'{module_name}-(\d+\.\d+(?:\.\d+)?(?:\.\d+)?(?:-(?:RC|beta|alpha|dev)\d*)?)(?=-\d{{4}}\.|-\d{{4}}\d{{2}}\.|\.\d+z|$)',
+                      filename,
+                      re.IGNORECASE
+                  )
                   if version_match:
                       ver = version_match.group(1)
                       assets.append({
@@ -150,6 +163,33 @@ jobs:
                   if '=' in line and not stripped.startswith('#'):
                       key, value = line.split('=', 1)
                       properties[key.strip()] = value.strip()
+          
+          # Fix malformed version entries by re-extracting correct versions from URLs
+          # This handles cases like "2025.7.2.7" or "18.1-2025" that should be "18.1"
+          fixed_properties = OrderedDict()
+          for key, url in properties.items():
+              # Try to extract the correct version from the URL
+              # URL format: .../bearsampp-postgresql-18.1-2025.7.2.7z
+              url_version_match = re.search(
+                  rf'{module_name}-(\d+\.\d+(?:\.\d+)?(?:\.\d+)?(?:-(?:RC|beta|alpha|dev)\d*)?)(?=-\d{{4}}\.|-\d{{4}}\d{{2}}\.|\.\d+z|/|$)',
+                  url,
+                  re.IGNORECASE
+              )
+              
+              if url_version_match:
+                  correct_version = url_version_match.group(1)
+                  # If the key is malformed (date-like or has trailing year), fix it
+                  if re.match(r'^20\d{2}\.', key) or re.search(r'-20\d{2}$', key):
+                      print(f"Fixing malformed entry: {key} -> {correct_version}")
+                      fixed_properties[correct_version] = url
+                  else:
+                      # Keep valid entries as-is
+                      fixed_properties[key] = url
+              else:
+                  # If we can't extract version from URL, keep the original entry
+                  fixed_properties[key] = url
+          
+          properties = fixed_properties
           
           # Add new versions
           for asset in assets:
