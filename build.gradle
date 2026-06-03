@@ -592,9 +592,9 @@ tasks.register('release') {
         println "Preparing archive..."
 
         // Determine build output path following Bruno pattern
-        // bearsampp-build/{bundleType}/{bundleName}
+        // bearsampp-build/{bundleType}/{bundleName}/{bundleRelease}
         def buildPath = file(buildBasePath)
-        def buildBinsPath = file("${buildPath}/${bundleType}/${bundleName}")
+        def buildBinsPath = file("${buildPath}/${bundleType}/${bundleName}/${bundleRelease}")
         buildBinsPath.mkdirs()
 
         // Build archive filename
