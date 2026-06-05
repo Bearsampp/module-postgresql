@@ -856,7 +856,20 @@ tasks.register('listReleases') {
 
         println "\nAvailable PostgreSQL Releases (modules-untouched):"
         println "-".multiply(80)
-        props.sort { a, b -> a.key <=> b.key }.each { version, url ->
+        props.sort { a, b ->
+            def aParts = a.key.tokenize('.').collect { it.isInteger() ? it.toInteger() : it }
+            def bParts = b.key.tokenize('.').collect { it.isInteger() ? it.toInteger() : it }
+            for (int i = 0; i < Math.max(aParts.size(), bParts.size()); i++) {
+                def aVal = i < aParts.size() ? aParts[i] : 0
+                def bVal = i < bParts.size() ? bParts[i] : 0
+                if (aVal.getClass() != bVal.getClass()) {
+                    aVal = aVal.toString()
+                    bVal = bVal.toString()
+                }
+                if (aVal != bVal) return aVal <=> bVal
+            }
+            return 0
+        }.each { version, url ->
             println "  ${version.padRight(10)} -> ${url}"
         }
         println "-".multiply(80)
