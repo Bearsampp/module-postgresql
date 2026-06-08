@@ -20,9 +20,9 @@ plugins {
     id 'base'
 }
 
-// Load build properties from gradle.properties
+// Load build properties from build.properties
 def buildProps = new Properties()
-file('gradle.properties').withInputStream { buildProps.load(it) }
+file('build.properties').withInputStream { buildProps.load(it) }
 
 // Project information
 group = 'com.bearsampp.modules'
@@ -35,14 +35,14 @@ ext {
     rootDir = projectDir.parent
     devPath = file("${rootDir}/dev").absolutePath
 
-    // Bundle properties from gradle.properties
+    // Bundle properties from build.properties
     bundleName = buildProps.getProperty('bundle.name', 'postgresql')
     bundleRelease = buildProps.getProperty('bundle.release', '1.0.0')
     bundleType = buildProps.getProperty('bundle.type', 'bins')
     bundleFormat = buildProps.getProperty('bundle.format', '7z')
 
     // Build paths - with configurable base path
-    // Priority: 1) gradle.properties, 2) Environment variable, 3) Default
+    // Priority: 1) build.properties, 2) Environment variable, 3) Default
     def buildPathFromProps = buildProps.getProperty('build.path', '').trim()
     def buildPathFromEnv = System.getenv('BEARSAMPP_BUILD_PATH') ?: ''
     def defaultBuildPath = "${rootDir}/bearsampp-build"
@@ -592,9 +592,9 @@ tasks.register('release') {
         println "Preparing archive..."
 
         // Determine build output path following Bruno pattern
-        // bearsampp-build/{bundleType}/{bundleName}
+        // bearsampp-build/{bundleType}/{bundleName}/{bundleRelease}
         def buildPath = file(buildBasePath)
-        def buildBinsPath = file("${buildPath}/${bundleType}/${bundleName}")
+        def buildBinsPath = file("${buildPath}/${bundleType}/${bundleName}/${bundleRelease}")
         buildBinsPath.mkdirs()
 
         // Build archive filename
@@ -856,7 +856,20 @@ tasks.register('listReleases') {
 
         println "\nAvailable PostgreSQL Releases (modules-untouched):"
         println "-".multiply(80)
-        props.sort { a, b -> a.key <=> b.key }.each { version, url ->
+        props.sort { a, b ->
+            def aParts = a.key.tokenize('.').collect { it.isInteger() ? it.toInteger() : it }
+            def bParts = b.key.tokenize('.').collect { it.isInteger() ? it.toInteger() : it }
+            for (int i = 0; i < Math.max(aParts.size(), bParts.size()); i++) {
+                def aVal = i < aParts.size() ? aParts[i] : 0
+                def bVal = i < bParts.size() ? bParts[i] : 0
+                if (aVal.getClass() != bVal.getClass()) {
+                    aVal = aVal.toString()
+                    bVal = bVal.toString()
+                }
+                if (aVal != bVal) return aVal <=> bVal
+            }
+            return 0
+        }.each { version, url ->
             println "  ${version.padRight(10)} -> ${url}"
         }
         println "-".multiply(80)
