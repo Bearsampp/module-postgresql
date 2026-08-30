@@ -101,8 +101,18 @@ def fetchModulesUntouchedProperties() {
 def getPostgreSQLDownloadUrl(String version) {
     // First, try to get from modules-untouched
     def untouchedProps = fetchModulesUntouchedProperties()
-    if (untouchedProps && untouchedProps.containsKey(version)) {
-        return untouchedProps.getProperty(version)
+    if (untouchedProps) {
+        // Prefer the suffixed source key (e.g. 18.6-1) when present; the release asset
+        // points to the actual binaries while the build version stays unsuffixed (18.6).
+        // Use string concatenation (not interpolation) to get a real String: a GString
+        // always fails Properties.containsKey() equality checks.
+        def suffixedVersion = version + '-1'
+        if (untouchedProps.containsKey(suffixedVersion)) {
+            return untouchedProps.getProperty(suffixedVersion)
+        }
+        if (untouchedProps.containsKey(version)) {
+            return untouchedProps.getProperty(version)
+        }
     }
 
     // Fallback: construct standard URL format
